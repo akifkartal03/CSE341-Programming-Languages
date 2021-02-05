@@ -1,0 +1,221 @@
+;; ***************************************
+;; *  Author: Akif Kartal                *
+;; *  Part : G++ Language Lexer in Lisp  *
+;; ***************************************
+;; gppinterpreter function that will start my interpreter.
+(defun gppinterpreter (&optional (filename nil is_filename_supplied))
+  (if is_filename_supplied
+    (start-interpreter-from-file filename)
+    (start-interpreter-from-shell)
+  )
+)
+;; read line by line from file and evaluate
+(defun start-interpreter-from-file (filename)
+  (open-file-to-write "parsed_lisp.txt")
+  (print "File has created.")
+  (with-open-file (stream filename :direction :input)
+    (loop for line1 = (read-line stream nil)
+      while line1 do (if (> (length line1) 0)
+                         (if (not (is-comment line1))
+                           (tokenize-one-line line1)))
+      )
+  )
+)
+;;read from terminal until empty string and evaluate given text.
+(defun start-interpreter-from-shell ()
+ (princ "Welcome to G++ shell made by Akif with Lisp, to exit enter empty string")
+ (open-file-to-write "parsed_lisp.txt")
+ (format t "~%") (princ "> ")
+  (let ((line ""))
+    (loop for newLine = (read-line)
+      while (> (length newLine) 0) do (if (not (is-comment newLine))
+                                      (tokenize-one-line newLine))
+    )
+   (print "File has created.")
+  )
+)
+;;split line from spaces and evaluate splitted tokens one by one.
+(defun tokenize-one-line (line)
+  (let ((str) (temp_end -1))
+    (loop for start_index = 0 then (+ 1 end_index)
+      as end_index = (position #\Space line :start start_index)
+      while end_index do (progn (setf str (subseq line start_index end_index))
+                                (if (> (length str) 0)
+                                (start-DFA-part1 str))
+                                (setf temp_end end_index))
+    )
+    (if (= (length line) 1) (start-DFA-part1 line)
+    (progn (setf str (subseq line (+ 1 temp_end) (length line)))
+    (if (> (length str) 0)
+      (start-DFA-part1 str))))
+))
+;;Apply DFA analysis steps for 1 character tokens
+(defun start-DFA-part1 (token)
+   (if (= 1 (length token))
+     (let ((chr (char token 0)))
+     (cond ((is-operator chr) t)
+       ((is-digit chr) (write-lexical-result-to-file "VALUE" nil))
+       ((alpha-char-p chr) (write-lexical-result-to-file "IDENTIFIER" nil))
+       ((char= #\Newline chr) t)
+       (t (write-lexical-result-to-file chr t))))
+   (start-DFA-part2 token))
+)
+;;Apply DFA analysis steps for long tokens
+(defun start-DFA-part2 (token)
+  (cond ((is-keyword token) t)
+    ((is-comment token) t)
+    ((is-value token) t)
+    ((is-identifier token) t)
+    ((is-operator-DBLMULT token) t)
+    ((check-tabs-and-paranthesis token) t)
+    (t (write-lexical-result-to-file token t)))
+)
+;;determine paranthesis
+(defun check-paranthesis-and-quotes (token)
+  (if (or (char= (char token 0) #\() (char= (char token 0) #\“)
+          (char= (char token (- (length token) 1)) #\)) (char= (char token (- (length token) 1)) #\”))
+    (progn (print-begin-paranthesis-and-quotes token) t) nil)
+)
+;;determine tabs
+(defun check-tabs-and-paranthesis (token)
+  (if (char= (char token 0) #\Tab)
+    (progn (remove-tabs token) t) (check-paranthesis-and-quotes token))
+)
+;;remove tabs to make correct analysis
+(defun remove-tabs (token)
+  (let ((counter 0))
+    (loop for chr across token
+      while (char= chr #\Tab) do (setf token (remove #\Tab token :count 1))
+    )
+    (start-DFA-part1 token)
+  )
+)
+;;check for operators
+(defun is-operator (chr)
+  (cond ((char= chr #\+) (write-lexical-result-to-file "OP_PLUS" nil))
+    ((char= chr #\-) (write-lexical-result-to-file "OP_MINUS" nil))
+    ((char= chr #\/) (write-lexical-result-to-file "OP_DIV" nil))
+    ((char= chr #\() (write-lexical-result-to-file "OP_OP" nil))
+    ((char= chr #\)) (write-lexical-result-to-file "OP_CP" nil))
+    ((char= chr #\“) (write-lexical-result-to-file "OP_OC" nil))
+    ((char= chr #\”) (write-lexical-result-to-file "OP_CC" nil))
+    ((char= chr #\,) (write-lexical-result-to-file "OP_COMMA" nil))
+    ((char= chr #\*) (write-lexical-result-to-file "OP_MULT" nil))
+    (t nil))
+
+)
+;;check for DBLMULT operator
+(defun is-operator-DBLMULT (token)
+  (if (= 2 (length token))
+    (if (string= token "**") (write-lexical-result-to-file "OP_DBLMULT" nil) nil) nil)
+)
+;;check for comment
+(defun is-comment (token)
+(if (> (length token) 1)
+  (if (search ";;" token :end2 2) (write-lexical-result-to-file "COMMENT" nil) nil) nil)
+
+)
+;;check for keywords
+(defun is-keyword (token)
+  (cond ((string= token "and") (write-lexical-result-to-file "KW_AND" nil))
+    ((string= token "or") (write-lexical-result-to-file "KW_OR" nil))
+    ((string= token "not") (write-lexical-result-to-file "KW_NOT" nil))
+    ((string= token "equal") (write-lexical-result-to-file "KW_EQUAL" nil))
+    ((string= token "less") (write-lexical-result-to-file "KW_LESS" nil))
+    ((string= token "nil") (write-lexical-result-to-file "KW_NIL" nil))
+    ((string= token "list") (write-lexical-result-to-file "KW_LIST" nil))
+    ((string= token "append") (write-lexical-result-to-file "KW_APPEND" nil))
+    ((string= token "concat") (write-lexical-result-to-file "KW_CONCAT" nil))
+    ((string= token "set") (write-lexical-result-to-file "KW_SET" nil))
+    ((string= token "deffun") (write-lexical-result-to-file "KW_DEFFUN" nil))
+    ((string= token "for") (write-lexical-result-to-file "KW_FOR" nil))
+    ((string= token "if") (write-lexical-result-to-file "KW_IF" nil))
+    ((string= token "exit") (write-lexical-result-to-file "KW_EXIT" nil))
+    ((string= token "load") (write-lexical-result-to-file "KW_LOAD" nil))
+    ((string= token "disp") (write-lexical-result-to-file "KW_DISP" nil))
+    ((string= token "true") (write-lexical-result-to-file "KW_TRUE" nil))
+    ((string= token "false") (write-lexical-result-to-file "KW_FALSE" nil))
+    (t nil))
+)
+;;check for values
+(defun is-value (token)
+  (let ((counter 0))
+    (loop for char across token
+      while char do (if (not (is-digit char)) (setf counter (+ 1 counter)))
+    )
+    (if (= 0 counter) (if (char= (char token 0) #\0) nil (write-lexical-result-to-file "VALUE" nil)) nil))
+)
+;;check for digits
+(defun is-digit (chr)
+(cond ((char= chr #\0) t)
+  ((char= chr #\1) t)
+  ((char= chr #\2) t)
+  ((char= chr #\3) t)
+  ((char= chr #\4) t)
+  ((char= chr #\5) t)
+  ((char= chr #\6) t)
+  ((char= chr #\7) t)
+  ((char= chr #\8) t)
+  ((char= chr #\9) t)
+  (t nil))
+)
+;;check for identifiers
+(defun is-identifier (token)
+  (if (is-digit (char token 0)) nil
+    (if (every #'alphanumericp token) (write-lexical-result-to-file "IDENTIFIER" nil) nil))
+)
+;;print and remove paranthesis to make correct analysis
+(defun print-begin-paranthesis-and-quotes (token)
+  (let ()
+    (loop for chr across token
+      while (or (char= chr #\() (char= chr #\“)) do (progn (is-operator chr)
+                                                           (setf token (remove chr token :count 1)))
+    )
+    (check-end-paranthesis-and-quotes token (get-end-paranthesis-and-quotes token))
+  )
+)
+;;get last paranthesis as list
+(defun get-end-paranthesis-and-quotes (token)
+  (setf token (reverse token))
+  (loop for chr across token
+    while (or (char= chr #\)) (char= chr #\”)) collect chr
+  )
+)
+;;print last paranthesis and apply DFA steps one more time.
+(defun check-end-paranthesis-and-quotes (token mylist)
+ (last-control token (list-length mylist))
+ (setf mylist (reverse mylist))
+ (if (or (/= (list-length mylist) 1) (/= (length token) 1))
+ (loop for parenth in mylist
+   while parenth do (is-operator parenth)
+ ))
+)
+;;apply DFA steps one more time after paranthesis were removed.
+(defun last-control (token size)
+  (let ((end (- (length token) size)))
+       (if (= (length token) 1) (start-DFA-part1 token)
+         (start-DFA-part1 (subseq token 0 end)))
+  )
+)
+;;open file in supersede mode to create.
+(defun open-file-to-write (filename)
+  (with-open-file (stream filename  :direction :output
+                                    :if-exists :supersede
+                                    :if-does-not-exist :create))
+)
+;;open file in append mode to write.
+(defun write-lexical-result-to-file (lexical_result is_error)
+   (with-open-file (stream "parsed_lisp.txt" :direction :output
+                                                :if-exists :append
+                                                :if-does-not-exist :create)
+         (if is_error
+           (write-sequence (format nil "SYNTAX ERROR ~a cannot be tokenized.~%" (string lexical_result)) stream)
+           (write-sequence (format nil "~a~%" (string lexical_result)) stream)))
+)
+;;check given command line arguments
+(defun start-tokenization ()
+  (if *args*
+    (gppinterpreter (first *args*))
+    (gppinterpreter))
+)
+(start-tokenization)
